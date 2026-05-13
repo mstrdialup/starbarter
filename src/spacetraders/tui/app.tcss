@@ -1,0 +1,79 @@
+/* SpaceTraders TUI stylesheet */
+
+Screen {
+    background: $background;
+}
+
+.agent-bar {
+    background: $primary-darken-3;
+    color: $text;
+    padding: 0 1;
+    height: 1;
+}
+
+.status-bar {
+    background: $surface-darken-1;
+    color: $text-muted;
+    padding: 0 1;
+    height: 1;
+}
+
+.ship-detail {
+    background: $surface;
+    border-top: solid $primary-darken-2;
+    padding: 1 2;
+    height: 6;
+}
+
+.contract-detail {
+    background: $surface;
+    border-top: solid $primary-darken-2;
+    padding: 1 2;
+    height: 8;
+    overflow-y: auto;
+}
+
+.routes-panel {
+    background: $surface;
+    border-top: solid $primary-darken-2;
+    padding: 1 2;
+    height: 8;
+    overflow-y: auto;
+}
+
+.tx-summary {
+    background: $surface;
+    border-top: solid $primary-darken-2;
+    padding: 0 2;
+    height: 2;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+DataTable > .datatable--header {
+    background: $primary-darken-2;
+    color: $text;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent-darken-1;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0;
+}
+
+CommandQueuePanel {
+    background: $surface-darken-1;
+    color: $text-muted;
+    padding: 0 1;
+    border-top: solid $primary-darken-3;
+    height: 5;
+    overflow-y: auto;
+}

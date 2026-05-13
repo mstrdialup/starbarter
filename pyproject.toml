@@ -15,9 +15,17 @@ dependencies = [
     "structlog",
 ]
 
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=1.8",
+]
+
 [project.scripts]
 st-bot = "spacetraders.bot.main:run"
 st-tui = "spacetraders.tui.app:run"
+st-web = "spacetraders.web.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

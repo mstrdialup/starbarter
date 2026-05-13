@@ -1,0 +1,33 @@
+services:
+  bot:
+    build: .
+    command: st-bot
+    env_file: .env
+    environment:
+      ST_DB_PATH: /data/spacetraders.db
+    volumes:
+      - st-data:/data
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: st-web
+    env_file: .env
+    environment:
+      ST_DB_PATH: /data/spacetraders.db
+      ST_WEB_PORT: "8080"
+    volumes:
+      - st-data:/data
+    ports:
+      - "${ST_WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+    depends_on:
+      - bot
+
+volumes:
+  st-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data

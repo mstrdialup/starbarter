@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0c10">
+  <title>SpaceTraders</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+  <div id="app">
+    <nav id="sidebar">
+      <div class="logo">ST</div>
+      <a href="#fleet"        class="nav-item" data-view="fleet">Fleet</a>
+      <a href="#contracts"    class="nav-item" data-view="contracts">Contracts</a>
+      <a href="#markets"      class="nav-item" data-view="markets">Markets</a>
+      <a href="#transactions" class="nav-item" data-view="transactions">Log</a>
+    </nav>
+    <main id="view-container" role="main"></main>
+    <footer id="status-bar" role="contentinfo"></footer>
+  </div>
+  <div id="modal-overlay" hidden aria-modal="true" role="dialog"></div>
+  <script type="module" src="/app/app.js"></script>
+</body>
+</html>

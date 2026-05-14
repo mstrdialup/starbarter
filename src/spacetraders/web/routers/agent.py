@@ -43,6 +43,7 @@ async def get_status(db: aiosqlite.Connection = Depends(get_db)) -> dict[str, An
         except (ValueError, TypeError):
             pass
 
+    bot_control = await queries.get_bot_control(db)
     return {
         "db_reachable": True,
         "reset_date": reset_meta["reset_date"] if reset_meta else None,
@@ -52,4 +53,8 @@ async def get_status(db: aiosqlite.Connection = Depends(get_db)) -> dict[str, An
         "bot_last_seen": bot_last_seen,
         "bot_online": bot_online,
         "pending_commands": len(pending),
+        "global_pause": bot_control.get("global_pause", "false") == "true",
+        "mining_enabled": bot_control.get("mining_enabled", "true") == "true",
+        "trading_enabled": bot_control.get("trading_enabled", "true") == "true",
+        "price_discovery_enabled": bot_control.get("price_discovery_enabled", "true") == "true",
     }

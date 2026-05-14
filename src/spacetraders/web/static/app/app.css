@@ -87,6 +87,60 @@ body {
   min-height: 32px;
 }
 
+/* ── Bot controls (sidebar section) ─────────────────────────────────────── */
+#bot-controls-sidebar {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.ctrl-section-label {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.ctrl-btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btn-ctrl {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-row);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-ctrl:hover {
+  border-color: var(--border-bright);
+  background: var(--bg-row-hover);
+}
+
+.btn-ctrl.ctrl-active {
+  color: var(--amber);
+  border-color: var(--amber-dim);
+  background: rgba(240,168,64,0.1);
+}
+
+.btn-ctrl.ctrl-off {
+  color: var(--red);
+  border-color: var(--red-dim);
+}
+
 /* ── Sidebar ────────────────────────────────────────────────────────────── */
 .logo {
   font-family: var(--font-ui);

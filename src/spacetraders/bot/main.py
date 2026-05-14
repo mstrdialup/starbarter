@@ -55,6 +55,9 @@ async def _bootstrap(db, client: SpaceTradersClient) -> str:
 
 
 async def _fetch_and_store_universe(db, client: SpaceTradersClient, system_symbol: str) -> None:
+    log.info("fetching_system", system=system_symbol)
+    system = await client.get_system(system_symbol)
+    await queries.upsert_system(db, system)
     log.info("fetching_waypoints", system=system_symbol)
     waypoints = await client.get_waypoints(system_symbol)
     for wp in waypoints:
@@ -91,11 +94,7 @@ async def _market_poller(
     try:
         while not stop_event.is_set():
             try:
-                waypoints = await queries.get_waypoints_by_type(
-                    db, system_symbol, "ORBITAL_STATION"
-                )
-                waypoints += await queries.get_waypoints_by_type(db, system_symbol, "MARKETPLACE")
-                waypoints += await queries.get_waypoints_by_type(db, system_symbol, "PLANET")
+                waypoints = await queries.get_market_waypoints(db, system_symbol)
                 for wp in waypoints:
                     wp_symbol = wp["symbol"]
                     try:

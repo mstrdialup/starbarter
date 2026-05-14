@@ -302,6 +302,66 @@ async def upsert_reset_meta(
     await db.commit()
 
 
+async def get_bot_control(db: aiosqlite.Connection) -> dict[str, str]:
+    """Return all bot_control rows as {key: value}."""
+    async with db.execute("SELECT key, value FROM bot_control") as cur:
+        rows = await cur.fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+
+async def set_bot_control(db: aiosqlite.Connection, key: str, value: str) -> None:
+    await db.execute(
+        """
+        INSERT INTO bot_control (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (key, value, _now_iso()),
+    )
+    await db.commit()
+
+
+async def insert_bot_activity(
+    db: aiosqlite.Connection,
+    ship_symbol: str | None,
+    event: str,
+    detail: str,
+) -> None:
+    await db.execute(
+        "INSERT INTO bot_activity (ts, ship_symbol, event, detail) VALUES (?, ?, ?, ?)",
+        (_now_iso(), ship_symbol, event, detail),
+    )
+    # Cap at 500 rows
+    await db.execute(
+        "DELETE FROM bot_activity WHERE id NOT IN (SELECT id FROM bot_activity ORDER BY id DESC LIMIT 500)"
+    )
+    await db.commit()
+
+
+async def get_bot_activity(db: aiosqlite.Connection, limit: int = 100) -> list[dict[str, Any]]:
+    async with db.execute(
+        "SELECT * FROM bot_activity ORDER BY id DESC LIMIT ?", (limit,)
+    ) as cur:
+        rows = await cur.fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+
+async def update_ship_pause(db: aiosqlite.Connection, symbol: str, paused: bool) -> None:
+    await db.execute(
+        "UPDATE ship SET paused = ?, updated_at = ? WHERE symbol = ?",
+        (1 if paused else 0, _now_iso(), symbol),
+    )
+    await db.commit()
+
+
+async def update_ship_last_action(db: aiosqlite.Connection, symbol: str, action: str) -> None:
+    await db.execute(
+        "UPDATE ship SET last_action = ?, last_action_at = ?, updated_at = ? WHERE symbol = ?",
+        (action, _now_iso(), _now_iso(), symbol),
+    )
+    await db.commit()
+
+
 async def clear_all_reset_data(db: aiosqlite.Connection) -> None:
     tables = [
         "reset_meta",
@@ -314,6 +374,8 @@ async def clear_all_reset_data(db: aiosqlite.Connection) -> None:
         "agent",
         "command_queue",
         "transaction_log",
+        "bot_activity",
+        "bot_control",
     ]
     for table in tables:
         await db.execute(f"DELETE FROM {table}")  # noqa: S608
@@ -412,6 +474,93 @@ async def get_waypoints_by_type(
     ) as cur:
         rows = await cur.fetchall()
         return [_row_to_dict(r) for r in rows]
+
+
+async def get_market_waypoints(db: aiosqlite.Connection, system: str) -> list[dict[str, Any]]:
+    """Return waypoints that have the MARKETPLACE trait."""
+    async with db.execute(
+        'SELECT * FROM waypoint WHERE system_symbol = ? AND traits LIKE \'%"MARKETPLACE"%\'',
+        (system,),
+    ) as cur:
+        rows = await cur.fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+
+async def get_unvisited_market_waypoints(
+    db: aiosqlite.Connection, system: str
+) -> list[dict[str, Any]]:
+    """Market waypoints that have never had price data collected (no rows in market_snapshot)."""
+    async with db.execute(
+        """
+        SELECT w.*
+        FROM waypoint w
+        WHERE w.system_symbol = ?
+          AND w.traits LIKE '%"MARKETPLACE"%'
+          AND NOT EXISTS (
+              SELECT 1 FROM market_snapshot ms WHERE ms.waypoint = w.symbol
+          )
+        """,
+        (system,),
+    ) as cur:
+        rows = await cur.fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+
+async def get_best_trade_route(
+    db: aiosqlite.Connection, system: str, cargo_capacity: int
+) -> dict[str, Any] | None:
+    """Find the highest-profit buy→sell route using current market snapshots.
+
+    Looks for goods available as EXPORT/EXCHANGE at one waypoint and
+    IMPORT/EXCHANGE at another, maximising (sell_price - purchase_price) * units.
+    """
+    rows = await get_all_market_latest_for_system(db, system)
+
+    # Separate into buy candidates and sell candidates per trade symbol
+    buy_options: dict[str, dict[str, dict]] = {}   # {trade_symbol: {waypoint: row}}
+    sell_options: dict[str, dict[str, dict]] = {}
+
+    for row in rows:
+        wp = row["waypoint"]
+        ts = row["trade_symbol"]
+        t = row.get("type")
+        if t in ("EXPORT", "EXCHANGE"):
+            buy_options.setdefault(ts, {})[wp] = row
+        if t in ("IMPORT", "EXCHANGE"):
+            sell_options.setdefault(ts, {})[wp] = row
+
+    best: dict[str, Any] | None = None
+    best_profit = 0
+
+    for trade_symbol, buy_markets in buy_options.items():
+        sell_markets = sell_options.get(trade_symbol, {})
+        for buy_wp, buy_row in buy_markets.items():
+            buy_price = buy_row.get("purchase_price") or 0
+            if buy_price <= 0:
+                continue
+            for sell_wp, sell_row in sell_markets.items():
+                if sell_wp == buy_wp:
+                    continue
+                sell_price = sell_row.get("sell_price") or 0
+                profit_per_unit = sell_price - buy_price
+                if profit_per_unit <= 0:
+                    continue
+                units = min(cargo_capacity, buy_row.get("trade_volume") or cargo_capacity)
+                total_profit = profit_per_unit * units
+                if total_profit > best_profit:
+                    best_profit = total_profit
+                    best = {
+                        "buy_waypoint": buy_wp,
+                        "sell_waypoint": sell_wp,
+                        "trade_symbol": trade_symbol,
+                        "units": units,
+                        "buy_price": buy_price,
+                        "sell_price": sell_price,
+                        "profit_per_unit": profit_per_unit,
+                        "expected_profit": total_profit,
+                    }
+
+    return best
 
 
 async def get_pending_commands(db: aiosqlite.Connection) -> list[dict[str, Any]]:
@@ -542,6 +691,15 @@ async def get_command(db: aiosqlite.Connection, command_id: int) -> dict[str, An
     async with db.execute("SELECT * FROM command_queue WHERE id = ?", (command_id,)) as cur:
         row = await cur.fetchone()
         return _row_to_dict(row) if row else None
+
+
+async def get_waypoint_coords(
+    db: aiosqlite.Connection, symbol: str
+) -> tuple[int, int] | None:
+    """Return (x, y) for a waypoint symbol, or None if not in DB."""
+    async with db.execute("SELECT x, y FROM waypoint WHERE symbol = ?", (symbol,)) as cur:
+        row = await cur.fetchone()
+        return (row["x"], row["y"]) if row else None
 
 
 async def get_all_market_latest_for_system(

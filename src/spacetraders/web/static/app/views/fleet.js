@@ -42,6 +42,13 @@ function fmtCondition(val) {
     </span>`;
 }
 
+function fmtLastActionTs(ts) {
+  if (!ts) return '';
+  try {
+    return ` (${new Date(ts).toLocaleTimeString()})`;
+  } catch { return ''; }
+}
+
 function renderDetail(ship) {
   if (!ship) return '<p class="status-dim">Select a ship</p>';
 
@@ -49,6 +56,7 @@ function renderDetail(ship) {
   const cooldownS = Math.round(secondsUntil(ship.cooldown_expires));
   const cooldownStr = cooldownS > 0 ? `${cooldownS}s` : 'Ready';
   const isTransit = ship.nav_status === 'IN_TRANSIT';
+  const isPaused = ship.paused;
 
   const cargoHtml = cargo.length
     ? cargo.map((i) =>
@@ -69,6 +77,15 @@ function renderDetail(ship) {
     `<button class="btn" data-cmd="${b.cmd}" ${b.disabled ? 'disabled' : ''}>${b.label}</button>`
   ).join('');
 
+  const lastActionHtml = ship.last_action
+    ? `<div class="detail-row">
+        <span class="detail-label">Action</span>
+        <span>${escHtml(ship.last_action)}${fmtLastActionTs(ship.last_action_at)}</span>
+      </div>`
+    : '';
+
+  const pauseLabel = isPaused ? '▶ Resume' : '⏸ Pause';
+
   return `
     <h3>${escHtml(ship.symbol)}</h3>
     <div class="detail-row">
@@ -87,6 +104,7 @@ function renderDetail(ship) {
       <span class="detail-label">Cooldown</span>
       <span>${cooldownStr}</span>
     </div>
+    ${lastActionHtml}
     <div style="margin-top:10px">
       <div class="detail-label" style="margin-bottom:4px">Condition</div>
       <div class="condition-bar"><span class="detail-label" style="width:60px">Frame</span>${fmtCondition(ship.condition_frame)}</div>
@@ -97,7 +115,40 @@ function renderDetail(ship) {
       <div class="detail-label" style="margin-bottom:4px">Cargo (${ship.cargo_units || 0}/${ship.cargo_capacity || 0})</div>
       <div class="cargo-list">${cargoHtml}</div>
     </div>
-    <div class="cmd-buttons">${btns}</div>`;
+    <div class="cmd-buttons">${btns}</div>
+    <div style="margin-top:8px">
+      <button class="btn" data-pause-ship="${escHtml(ship.symbol)}" data-paused="${isPaused ? '1' : '0'}">${pauseLabel}</button>
+    </div>
+    <div id="ship-recent-cmds" style="margin-top:12px">
+      <div class="detail-label" style="margin-bottom:4px">Recent Commands</div>
+      <div class="status-dim" style="font-size:0.85em">Loading…</div>
+    </div>`;
+}
+
+async function loadRecentCmds(container, shipSymbol) {
+  const el = container.querySelector('#ship-recent-cmds');
+  if (!el) return;
+  try {
+    const res = await fetch(`/api/commands?limit=20`);
+    if (!res.ok) { el.querySelector('div').textContent = '—'; return; }
+    const all = await res.json();
+    const cmds = all.filter((c) => c.ship_symbol === shipSymbol).slice(0, 5);
+    if (!cmds.length) {
+      el.innerHTML = '<div class="detail-label" style="margin-bottom:4px">Recent Commands</div><div class="status-dim" style="font-size:0.85em">None</div>';
+      return;
+    }
+    const rows = cmds.map((c) => {
+      const statusCls = c.status === 'done' ? 'status-ready' : c.status === 'failed' ? 'status-critical' : 'status-dim';
+      return `<div style="font-size:0.85em;margin-bottom:2px">
+        <span class="${statusCls}">[${escHtml(c.status)}]</span>
+        ${escHtml(c.command)}
+        ${c.result ? `<span class="status-dim"> → ${escHtml(JSON.stringify(JSON.parse(c.result)).slice(0, 60))}</span>` : ''}
+      </div>`;
+    }).join('');
+    el.innerHTML = `<div class="detail-label" style="margin-bottom:4px">Recent Commands</div>${rows}`;
+  } catch {
+    el.innerHTML = '<div class="detail-label" style="margin-bottom:4px">Recent Commands</div>';
+  }
 }
 
 function renderFleet(container) {
@@ -133,10 +184,12 @@ function renderFleet(container) {
       _selectedSymbol = ship.symbol;
       container.querySelector('#fleet-detail').innerHTML = renderDetail(ship);
       wireDetailButtons(container, ship);
+      loadRecentCmds(container, ship.symbol);
     },
   });
 
   wireDetailButtons(container, selected);
+  if (selected) loadRecentCmds(container, selected.symbol);
 }
 
 function wireDetailButtons(container, ship) {
@@ -148,6 +201,24 @@ function wireDetailButtons(container, ship) {
         ? { symbol: ship.cargo_inventory[0].symbol, units: ship.cargo_inventory[0].units }
         : {};
       await openCommandModal({ shipSymbol: ship.symbol, command: cmd, prefill });
+    });
+  });
+
+  // Per-ship pause button
+  container.querySelectorAll('[data-pause-ship]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const sym = btn.dataset.pauseShip;
+      const currentlyPaused = btn.dataset.paused === '1';
+      btn.disabled = true;
+      try {
+        await fetch(`/api/bot-control/ship/${encodeURIComponent(sym)}/pause`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paused: !currentlyPaused }),
+        });
+      } catch { /* ignore */ } finally {
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -165,6 +236,7 @@ export function mountFleet(container) {
 
   const onUpdate = () => {
     if (window.ST.currentView !== 'fleet') return;
+    _ships = window.ST.ships;
     renderFleet(container);
   };
 
@@ -181,9 +253,12 @@ export function mountFleet(container) {
   const tick = setInterval(() => {
     if (!container.isConnected) { clearInterval(tick); return; }
     if (window.ST.currentView !== 'fleet') return;
+    _ships = window.ST.ships;
     const selected = _ships.find((s) => s.symbol === _selectedSymbol) || _ships[0];
     const detail = container.querySelector('#fleet-detail');
-    if (detail && selected) detail.innerHTML = renderDetail(selected);
-    wireDetailButtons(container, selected);
+    if (detail && selected) {
+      detail.innerHTML = renderDetail(selected);
+      wireDetailButtons(container, selected);
+    }
   }, 1000);
 }

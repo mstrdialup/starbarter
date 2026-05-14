@@ -124,7 +124,24 @@ export function mountMarkets(container) {
     else renderPrices(_system);
   }
 
-  const onUpdate = () => { if (window.ST.currentView === 'markets') reload(); };
+  async function refreshSystemDropdown() {
+    const systems = await loadSystems();
+    const sel = container.querySelector('#system-sel');
+    if (!sel) return;
+    if (!_system && systems.length) _system = systems[0];
+    const existing = Array.from(sel.options).map((o) => o.value);
+    if (systems.join(',') !== existing.join(',')) {
+      sel.innerHTML = systems
+        .map((s) => `<option value="${s}" ${s === _system ? 'selected' : ''}>${s}</option>`)
+        .join('');
+    }
+  }
+
+  const onUpdate = () => {
+    if (window.ST.currentView !== 'markets') return;
+    refreshSystemDropdown();
+    reload();
+  };
   document.addEventListener('st:market_update', onUpdate);
   container.addEventListener('st:unmount', () =>
     document.removeEventListener('st:market_update', onUpdate));

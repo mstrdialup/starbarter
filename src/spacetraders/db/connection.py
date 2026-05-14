@@ -22,6 +22,20 @@ async def get_db(db_path: str | None = None) -> aiosqlite.Connection:
     return db
 
 
+async def _migrate_db(db: aiosqlite.Connection) -> None:
+    """Add columns introduced after initial schema creation."""
+    for stmt in [
+        "ALTER TABLE ship ADD COLUMN paused INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE ship ADD COLUMN last_action TEXT",
+        "ALTER TABLE ship ADD COLUMN last_action_at TEXT",
+    ]:
+        try:
+            await db.execute(stmt)
+        except Exception:
+            pass  # column already exists
+    await db.commit()
+
+
 async def init_db(db_path: str | None = None) -> None:
     path = db_path or config.DB_PATH
     async with _lock:
@@ -32,6 +46,7 @@ async def init_db(db_path: str | None = None) -> None:
         try:
             await db.executescript(schema)
             await db.commit()
+            await _migrate_db(db)
         finally:
             await db.close()
         _initialised.add(path)

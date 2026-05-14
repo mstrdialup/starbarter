@@ -18,6 +18,8 @@ async def event_stream(request: Request) -> EventSourceResponse:
         last_agent_ts: str | None = None
         last_command_id: int | None = None
         last_market_ts: str | None = None
+        last_activity_id: int | None = None
+        last_ctrl_ts: str | None = None
         tick = 0
 
         db = await _get_db()
@@ -45,6 +47,22 @@ async def event_stream(request: Request) -> EventSourceResponse:
                                     "data": json.dumps(cmd),
                                 }
                                 break
+
+                # Activity log updates
+                activity = await queries.get_bot_activity(db, limit=1)
+                if activity:
+                    newest_id = activity[0]["id"]
+                    if newest_id != last_activity_id:
+                        last_activity_id = newest_id
+                        yield {"event": "activity_update", "data": json.dumps({"latest_id": newest_id})}
+
+                # Bot control flag updates
+                ctrl_rows = await queries.get_bot_control(db)
+                # Use a simple hash of the dict as change detector
+                ctrl_sig = json.dumps(ctrl_rows, sort_keys=True)
+                if ctrl_sig != last_ctrl_ts:
+                    last_ctrl_ts = ctrl_sig
+                    yield {"event": "bot_control_update", "data": json.dumps(ctrl_rows)}
 
                 # Ship updates every other tick (4s)
                 if tick % 2 == 0:

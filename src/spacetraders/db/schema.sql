@@ -107,6 +107,22 @@ CREATE TABLE IF NOT EXISTS command_queue (
     completed_at TEXT
 );
 
+-- Bot control flags (global pause, feature toggles)
+CREATE TABLE IF NOT EXISTS bot_control (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Bot activity log
+CREATE TABLE IF NOT EXISTS bot_activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    ship_symbol TEXT,
+    event TEXT NOT NULL,
+    detail TEXT
+);
+
 -- Transaction log
 CREATE TABLE IF NOT EXISTS transaction_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

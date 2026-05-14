@@ -15,6 +15,7 @@ from spacetraders import config
 from spacetraders.db.connection import get_db, init_db
 from spacetraders.web.routers import (
     agent,
+    bot_control,
     commands,
     contracts,
     events,
@@ -67,6 +68,7 @@ app.include_router(contracts.router, prefix="/api")
 app.include_router(markets.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")
 app.include_router(commands.router, prefix="/api")
+app.include_router(bot_control.router, prefix="/api")
 app.include_router(events.router)
 
 if (_STATIC_DIR / "app").exists():

@@ -53,6 +53,8 @@ async def _dispatch(
         ship_data = await queries.get_ship(db, ship)  # type: ignore[arg-type]
         if ship_data and ship_data["nav_status"] == "DOCKED":
             await client.orbit(ship)  # type: ignore[arg-type]
+            docked = await client.get_ship(ship)  # type: ignore[arg-type]
+            await queries.upsert_ship(db, docked)
         nav = await client.navigate(ship, waypoint)  # type: ignore[arg-type]
         updated = await client.get_ship(ship)  # type: ignore[arg-type]
         await queries.upsert_ship(db, updated)
@@ -60,10 +62,14 @@ async def _dispatch(
 
     if command == "dock":
         nav = await client.dock(ship)  # type: ignore[arg-type]
+        updated = await client.get_ship(ship)  # type: ignore[arg-type]
+        await queries.upsert_ship(db, updated)
         return {"nav": nav.model_dump()}
 
     if command == "orbit":
         nav = await client.orbit(ship)  # type: ignore[arg-type]
+        updated = await client.get_ship(ship)  # type: ignore[arg-type]
+        await queries.upsert_ship(db, updated)
         return {"nav": nav.model_dump()}
 
     if command == "buy":
@@ -101,6 +107,11 @@ async def _dispatch(
         return {"transaction": tx.model_dump()}
 
     if command == "refuel":
+        ship_data = await queries.get_ship(db, ship)  # type: ignore[arg-type]
+        if ship_data and ship_data["nav_status"] != "DOCKED":
+            await client.dock(ship)  # type: ignore[arg-type]
+            docked = await client.get_ship(ship)  # type: ignore[arg-type]
+            await queries.upsert_ship(db, docked)
         result = await client.refuel(ship)  # type: ignore[arg-type]
         updated = await client.get_ship(ship)  # type: ignore[arg-type]
         await queries.upsert_ship(db, updated)

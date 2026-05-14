@@ -140,11 +140,11 @@ class SpaceTradersClient:
         return Ship.model_validate(data["data"])
 
     async def orbit(self, ship: str) -> ShipNav:
-        data = await self._request("POST", f"/my/ships/{ship}/orbit")
+        data = await self._request("POST", f"/my/ships/{ship}/orbit", json={})
         return ShipNav.model_validate(data["data"]["nav"])
 
     async def dock(self, ship: str) -> ShipNav:
-        data = await self._request("POST", f"/my/ships/{ship}/dock")
+        data = await self._request("POST", f"/my/ships/{ship}/dock", json={})
         return ShipNav.model_validate(data["data"]["nav"])
 
     async def navigate(self, ship: str, waypoint: str) -> ShipNav:
@@ -178,7 +178,7 @@ class SpaceTradersClient:
         return Extraction.model_validate(data["data"]["extraction"])
 
     async def survey(self, ship: str) -> list[Survey]:
-        data = await self._request("POST", f"/my/ships/{ship}/survey")
+        data = await self._request("POST", f"/my/ships/{ship}/survey", json={})
         return [Survey.model_validate(s) for s in data["data"]["surveys"]]
 
     async def purchase_cargo(self, ship: str, symbol: str, units: int) -> MarketTransaction:
@@ -255,11 +255,11 @@ class SpaceTradersClient:
         return Contract.model_validate(data["data"]["contract"])
 
     async def fulfill_contract(self, contract_id: str) -> Contract:
-        data = await self._request("POST", f"/my/contracts/{contract_id}/fulfill")
+        data = await self._request("POST", f"/my/contracts/{contract_id}/fulfill", json={})
         return Contract.model_validate(data["data"]["contract"])
 
     async def negotiate_contract(self, ship: str) -> Contract:
-        data = await self._request("POST", f"/my/ships/{ship}/negotiate/contract")
+        data = await self._request("POST", f"/my/ships/{ship}/negotiate/contract", json={})
         return Contract.model_validate(data["data"]["contract"])
 
     async def buy_ship(self, ship_type: str, waypoint: str) -> Ship:

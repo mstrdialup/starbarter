@@ -520,3 +520,93 @@ async def get_usable_surveys(db: aiosqlite.Connection, waypoint: str) -> list[di
     ) as cur:
         rows = await cur.fetchall()
         return [_row_to_dict(r) for r in rows]
+
+
+async def cancel_command(db: aiosqlite.Connection, command_id: int) -> bool:
+    """Set a pending command to cancelled. Returns False if not in pending state."""
+    async with db.execute("SELECT status FROM command_queue WHERE id = ?", (command_id,)) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return False
+    if row["status"] != "pending":
+        return False
+    await db.execute(
+        "UPDATE command_queue SET status = 'cancelled', completed_at = ? WHERE id = ?",
+        (_now_iso(), command_id),
+    )
+    await db.commit()
+    return True
+
+
+async def get_command(db: aiosqlite.Connection, command_id: int) -> dict[str, Any] | None:
+    async with db.execute("SELECT * FROM command_queue WHERE id = ?", (command_id,)) as cur:
+        row = await cur.fetchone()
+        return _row_to_dict(row) if row else None
+
+
+async def get_all_market_latest_for_system(
+    db: aiosqlite.Connection, system_symbol: str
+) -> list[dict[str, Any]]:
+    async with db.execute(
+        """
+        SELECT ms.*
+        FROM market_snapshot ms
+        INNER JOIN (
+            SELECT waypoint, trade_symbol, MAX(snapshot_ts) AS max_ts
+            FROM market_snapshot
+            WHERE waypoint LIKE ?
+            GROUP BY waypoint, trade_symbol
+        ) latest ON ms.waypoint = latest.waypoint
+            AND ms.trade_symbol = latest.trade_symbol
+            AND ms.snapshot_ts = latest.max_ts
+        ORDER BY ms.waypoint, ms.trade_symbol
+        """,
+        (f"{system_symbol}-%",),
+    ) as cur:
+        rows = await cur.fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+
+async def get_transaction_summary(db: aiosqlite.Connection) -> dict[str, Any]:
+    async with db.execute(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN type='SELL' THEN total ELSE 0 END), 0) AS total_revenue,
+            COALESCE(SUM(CASE WHEN type='BUY'  THEN total ELSE 0 END), 0) AS total_cost,
+            trade_symbol,
+            COALESCE(SUM(CASE WHEN type='SELL' THEN units ELSE 0 END), 0) AS sell_units,
+            COALESCE(SUM(CASE WHEN type='BUY'  THEN units ELSE 0 END), 0) AS buy_units,
+            COALESCE(SUM(CASE WHEN type='SELL' THEN total ELSE 0 END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN type='BUY'  THEN total ELSE 0 END), 0) AS cost
+        FROM transaction_log
+        GROUP BY trade_symbol
+        """
+    ) as cur:
+        rows = await cur.fetchall()
+
+    by_good = []
+    total_revenue = 0
+    total_cost = 0
+    for r in rows:
+        d = _row_to_dict(r)
+        revenue = d["revenue"]
+        cost = d["cost"]
+        total_revenue += revenue
+        total_cost += cost
+        by_good.append(
+            {
+                "trade_symbol": d["trade_symbol"],
+                "sell_units": d["sell_units"],
+                "buy_units": d["buy_units"],
+                "revenue": revenue,
+                "cost": cost,
+                "profit": revenue - cost,
+            }
+        )
+    by_good.sort(key=lambda x: -x["profit"])
+    return {
+        "total_revenue": total_revenue,
+        "total_cost": total_cost,
+        "net_profit": total_revenue - total_cost,
+        "by_good": by_good,
+    }
